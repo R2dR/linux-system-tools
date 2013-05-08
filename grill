@@ -1,0 +1,91 @@
+#!/bin/bash
+GRILL_VERSION=1.6
+# Copyright(c) 2012 RubytotheRails.com
+# This is free software distributed per the MIT License at www.r2dr.com/licenses/commands
+# Copyright and License URL must be included for any distribution
+function paint { echo $2; }
+function colorOn { echo -n; }
+function colorOff { echo -n; }
+[[ -f "$(dirname $0)/colorize" ]] && source "$(dirname $0)/colorize"
+
+function usage {
+  echo "kills processes grepped from ps output"
+  echo "grill grep-phrase ... shows grepped processes"
+  echo ""
+  echo "  -x kills grepped processes" 
+  echo "  -u display unique process cmds grep list"
+  echo "  -c count"
+  echo "  -h, --help"
+}
+
+KILL=
+UNIQ=
+COUNT=
+PHRASE=
+HELP=
+FULLCMD=y
+for arg in "$@"; do
+case $arg in
+  -c) COUNT=y ;;
+  -x) KILL=y ;;
+  -u) UNIQ=y ;;
+  -f) FULLCMD=y ;;
+  -h | --help ) HELP=y ;;
+  --version) echo $GRILL_VERSION; exit ;;
+  *)
+  if [[ -z $PHRASE ]]; then
+    PHRASE=$arg
+  else
+    PHRASE="$PHRASE $arg"
+  fi
+  ;;
+esac
+done
+
+function check_grep_phrase {
+  if [[ -z $PHRASE ]]; then
+    echo "Must provide grep phrase"
+    echo ""
+    exit 1
+  fi
+}
+
+function grep_processes {
+  check_grep_phrase
+  #ps -ef | awk '{printf "%s %s\n", $2, $8}'
+  OUT=$(mktemp)
+	ps -ef > $OUT
+
+	CMDCUT=8
+	[[ $FULLCMD ]] && CMDCUT=8-
+	
+	cat $OUT |
+	egrep -v "$0 $PHRASE" |
+	tr -s ' ' |
+	cut -d' ' -f2,$CMDCUT |
+	sed -e "s/ /\t/" |
+	sed -re "s/\t\/?([a-z]+\/)+/\t/" |
+#	sed -e "s/ /\t/" |
+	grep $PHRASE |
+	cat
+}
+function grep_process_cmds {
+  grep_processes | cut -f2-
+}
+function grep_process_pids {
+  grep_processes | cut -f1
+}
+
+if [[ $HELP ]]; then
+	usage
+elif [[ $KILL ]]; then
+	sudo kill -s 9 `grep_process_pids | tr '\n' ' '`
+elif [[ $UNIQ ]]; then
+	grep_process_cmds | sort | uniq
+elif [[ $COUNT ]]; then
+  grep_processes | wc -l
+else
+  grep_processes | column -s$'\t' -t
+fi
+
+echo ""

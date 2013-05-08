@@ -1,0 +1,189 @@
+#!/bin/bash
+# Copyright(c) 2012 RubytotheRails.com
+# This is free software distributed per the MIT License at www.r2dr.com/licenses/commands
+# Copyright and License URL must be included for any distribution
+function paint { echo $2; }
+function colorOn { echo -n; }
+function colorOff { echo -n; }
+[[ -f "$(dirname $0)/colorize" ]] && source "$(dirname $0)/colorize"
+
+KT_VERSION=2.1
+DIR=~/.kt
+mkdir $DIR 2>/dev/null
+
+PROCESS_VARS_FILE=$DIR/vars
+SCAN_FILE=$DIR/scan
+KTRC=$DIR/rc
+
+#-- set process variables
+
+VTIME=
+VCPU=
+VNAME=
+VBASENAME=
+VPID=
+VOWNER=
+
+if [[ -f $PROCESS_VARS_FILE && -s $PROCESS_VARS_FILE ]]
+then
+  source $PROCESS_VARS_FILE
+fi
+
+#-- set command properties
+
+CUTOFF=10.0
+FN=top
+
+[[ -f $KTRC ]] && source $KTRC
+
+function usage {
+  echo "kills the top process by cpu usage" 
+  echo "  default shows top three processes"
+  echo ""
+  echo "  -x  kill top process if cpu >= cutoff ($CUTOFF%)"
+  echo "  -f  force kill top process regardless of cpu level"
+  echo ""
+  echo "  -u  [top,ps] function to use for cpu usage reading"
+  echo "  -c  [0-100] set cutoff level"
+  echo "  -s  show configuration"
+}
+
+function readtopn {
+  top -n 1 -b | tail -n+8 | tr -s ' ' | head -n $1 
+}
+
+function readpsn {
+  ps aux | grep -v '%MEM' | sort -nr -k3,3 | head -n $1 
+}
+
+function parse_top_process {
+  TOPLINE=`head -n 1 $SCAN_FILE`
+  VTIME=`date +%s`
+  if [[ "$FN" == "top" ]]
+  then
+    VCPU=`echo $TOPLINE | awk '{print $9}'`
+    VPID=`echo $TOPLINE | awk '{print $1}'`
+    VNAME=`echo $TOPLINE | awk '{print $12}'`
+    VBASENAME=`basename $VNAME`
+    VOWNER=`echo $TOPLINE | awk '{print $2}'`
+  else
+    VCPU=`echo $TOPLINE | awk '{print $3}'`
+    VPID=`echo $TOPLINE | awk '{print $2}'`
+    VNAME=`echo $TOPLINE | awk '{print $11}'`
+    VBASENAME=`basename $VNAME`
+    VOWNER=`echo $TOPLINE | awk '{print $1}'`
+  fi
+
+  #save process vars
+  echo "VTIME=$VTIME" > $PROCESS_VARS_FILE
+  echo "VCPU=$VCPU" >> $PROCESS_VARS_FILE
+  echo "VPID=$VPID" >> $PROCESS_VARS_FILE
+  echo "VNAME=$VNAME" >> $PROCESS_VARS_FILE
+  echo "VBASENAME=$VBASENAME" >> $PROCESS_VARS_FILE
+  echo "VOWNER=$VOWNER" >> $PROCESS_VARS_FILE
+}
+
+function scantopn {
+  if [[ "$FN" == "top" ]]
+  then
+    readtopn $1 > $SCAN_FILE
+    awk '{printf ">> (%s%) %s [%s:%s]\n", $9,$12,$2,$1 }' $SCAN_FILE
+  else
+    readpsn $1 > $SCAN_FILE
+    awk '{printf ">> (%s%) %s [%s:%s]\n", $3,$11,$1,$2 }' $SCAN_FILE
+  fi
+  parse_top_process
+}
+
+function kill_process {
+  if [[ -f $PROCESS_VARS_FILE ]]
+  then
+    rm -f $PROCESS_VARS_FILE
+  fi
+  sudo kill -s 9 $VPID
+  echo "Killing $VNAME:[$VOWNER] at $VCPU% cpu"
+}
+
+function savektrc {
+  echo "CUTOFF=$CUTOFF" > $KTRC
+  echo "FN=$FN" >> $KTRC
+  showktrc
+  exit 0
+}
+
+function showktrc {
+  if [[ ! -f $KTRC ]]
+  then 
+    savektrc
+  fi
+  cat $KTRC
+}
+
+function confirm_root_kill {
+  echo "You are trying to kill a root process [$VNAME]."
+  echo "Are you sure?  Use -ff to force kill root processes."
+}
+
+if [[ $1 == "--version" ]]; then
+	echo $KT_VERSION; exit;
+fi
+
+if [[ "$1" == "" || "$1" =~ ^[0-9]+$ ]]; then
+  if [[ "$1" != "" ]]; then
+    COUNT=$1
+  else
+    COUNT=3
+  fi
+  scantopn $COUNT
+
+elif [[ "$1" == "-s" ]]; then
+  showktrc
+
+elif [[ "$1" == "-c" ]]; then
+  CUTOFF=$2
+  savektrc
+
+elif [[ "$1" == "-u" ]]; then
+  if [[ "$2" != "ps" && "$2" != "top" ]]; then
+    echo "Must use either 'ps' or 'top' with -u switch"
+  else
+    FN=$2
+    savektrc
+  fi
+
+elif [[ "$1" == "-x" || "$1" == "-f" || "$1" == "-ff" ]]; then
+  TIME=`date +%s`
+  if [[ "$VTIME" == "" ]]; then
+    VTIME=0
+  fi
+  TIME_TEST=`echo "$TIME <= ($VTIME + 7)" | bc`	
+  if [[ "$TIME_TEST" == "0" ]]; then
+    echo "Process data stale: refreshing scan..."
+    scantopn 3
+    echo ""
+    exit 0
+  fi
+
+  CUTOFF_TEST=`echo "$VCPU >= $CUTOFF" | bc`
+  if [[ "$1" == "-f" || "$1" == "-ff" ]]; then
+    if [[ "$VOWNER" == "root" && "$1" != "-ff" ]]; then
+      confirm_root_kill
+    else
+      kill_process
+    fi
+  elif [[ "$1" == "-x" ]]; then
+    if [[ "$CUTOFF_TEST" != "0" ]]; then
+      if [[ "$VOWNER" == "root" ]]; then
+        confirm_root_kill
+      else
+        kill_process
+      fi
+    else
+      echo "$VNAME is not at or above $CUTOFF% cpu usage."
+      echo "Are you sure?  Use -f to force kill or adjust cutoff."
+    fi
+  fi
+else
+  usage
+fi
+echo ""

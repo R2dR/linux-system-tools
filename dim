@@ -1,0 +1,34 @@
+#!/bin/bash
+DIM_VERSION=1.4
+# Copyright(c) 2012 RubytotheRails.com
+# This is free software distributed per the MIT License at www.r2dr.com/licenses/commands
+# Copyright and License URL must be included for any distribution
+function paint { echo $2; }
+function colorOn { echo -n; }
+function colorOff { echo -n; }
+[[ -f "$(dirname $0)/colorize" ]] && source "$(dirname $0)/colorize"
+
+function usage {
+  echo "Usage: dim [0-100]"
+}
+
+type xbacklight >/dev/null 2>&1 || { 
+  read -p "Xbacklight utility is required. Would you like to install Xbacklight? (y/n)" -n 1 -r; echo ""
+  if [[ $REPLY =~ [Yy] ]]; then
+    sudo apt-get install xbacklight
+    echo "'xbacklight' installed."; echo ""
+    exit 0
+  fi
+  echo ""
+  exit 1
+}
+
+case $1 in
+  '') xbacklight | cut -d '.' -f1;;
+  --version) echo $DIM_VERSION; exit ;;
+  -h|--help) usage;;
+  [0-9]|[1-9][0-9]|100) xbacklight -set $1;;
+  *) usage;;
+esac
+
+echo ""

@@ -1,0 +1,27 @@
+#!/bin/bash
+USERS_VERSION=1.1
+# Copyright(c) 2012 RubytotheRails.com
+# This is free software distributed per the MIT License at www.r2dr.com/licenses/commands
+# Copyright and License URL must be included for any distribution
+function paint { echo $2; }
+function colorOn { echo -n; }
+function colorOff { echo -n; }
+[[ -f "$(dirname $0)/colorize" ]] && source "$(dirname $0)/colorize"
+
+function usage {
+  echo "Show"
+  echo ""
+  echo "Usage: usrs"
+  echo ""
+  echo "  -h, --help"
+}
+
+case $1 in
+	--version) echo $USERS_VERSION; exit ;;
+  -h|--help) colorOn yellow; usage; colorOff ;;
+  *)
+    cat /etc/passwd | grep /bin/bash | cut -d: -f1
+  ;;
+esac
+
+echo ""
