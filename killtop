@@ -90,11 +90,11 @@ function scantopn {
   then
     readtopn $1 > $SCAN_FILE
     colorOn green
-    awk '{printf ">> (%s%) %s [%s:%s]\n", $9,$12,$2,$1 }' $SCAN_FILE
+    awk '{printf ">> (%s%%) %s [%s:%s]\n", $9,$12,$2,$1 }' $SCAN_FILE
   else
     readpsn $1 > $SCAN_FILE
     colorOn green
-    awk '{printf ">> (%s%) %s [%s:%s]\n", $3,$11,$1,$2 }' $SCAN_FILE
+    awk '{printf ">> (%s%%) %s [%s:%s]\n", $3,$11,$1,$2 }' $SCAN_FILE
   fi
   colorOff
   parse_top_process
